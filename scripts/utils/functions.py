@@ -16,6 +16,9 @@ from shapely import Polygon, LineString, Point
 
 from IPython.display import display
 
+from matplotlib.ticker import FuncFormatter
+
+
 ## SETTINGS
 
 pd.set_option('display.max_columns', 50)  # Set max number of columns to display
@@ -108,3 +111,20 @@ def create_quantile_col(df, col_name, field, num_quantiles, asc=False, group_fie
                 .transform(lambda x: 1 + pd.qcut(x, num_quantiles, labels=False))
             )
     return df
+
+
+# Custom function to format latitude values
+def format_latitude(x, pos):
+    direction = 'N' if x >= 0 else 'S'  # 'N' for North, 'S' for South
+    if x.is_integer():
+        return f'{abs(x):.0f}° {direction}'
+    else:
+        return f'{abs(x):.1f}° {direction}'
+
+# Custom function to format longitude values
+def format_longitude(x, pos):
+    direction = 'E' if x >= 0 else 'W'  # 'E' for East, 'W' for West
+    if x.is_integer():
+        return f'{abs(x):.0f}° {direction}'
+    else:
+        return f'{abs(x):.1f}° {direction}'
