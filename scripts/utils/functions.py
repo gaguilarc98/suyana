@@ -128,3 +128,69 @@ def format_longitude(x, pos):
         return f'{abs(x):.0f}° {direction}'
     else:
         return f'{abs(x):.1f}° {direction}'
+    
+def fill_empty_window(ds_period1, ds_period2):
+    # Define the empty time window
+    empty_window_start = "2011-10-04"
+    empty_window_end = "2012-07-24"
+
+    # Create a temporary dataframe from which to sample
+    df_dist = ds_period2.to_dataframe().reset_index()
+
+    # Create a time range for the empty window
+    empty_time_range = pd.date_range(empty_window_start, empty_window_end, freq="D")
+    lon_range = sorted(df_dist['lon'].unique())
+    lat_range = sorted(df_dist['lat'].unique())
+
+    empty_grid = pd.MultiIndex.from_product(
+        [lon_range, lat_range, empty_time_range],
+        names = ["lon", "lat", "time"]
+    ).to_frame(index=False)
+
+    empty_grid['week'] = empty_grid['time'].dt.isocalendar().week
+
+    empty_grid_size = empty_grid.groupby(['lon', 'lat', 'week']).agg(
+        size = ("time", "count")
+    ).reset_index()
+
+    df_base = df_dist.merge(
+        empty_grid_size,
+        how = "left",
+        on = ['lon', 'lat', 'week']
+    )
+    
+    df_base['size'] = (df_base['size'].fillna(0)).astype(int)
+    
+    df_base = df_base.groupby(['lon', 'lat', 'week']).apply(
+        lambda x: x.sample(
+            n=min(len(x), x['size'].iloc[0])  # Ensure not to oversample
+        )
+    ).reset_index(drop=True)
+    
+    df_base = df_base[['lon', 'lat', 'week','swc','swc_adjusted']]
+    
+    df_base['day_index'] = df_base.groupby(['lon', 'lat', 'week']).cumcount()
+    # Add a day index to the empty grid
+    empty_grid['day_index'] = empty_grid.groupby(['lon', 'lat', 'week']).cumcount()
+    
+    # Step 5: Merge the expanded sampled data with the empty grid
+    empty_grid = empty_grid.merge(
+        df_base,
+        how = "left",
+        on = ['lon', 'lat', 'week', 'day_index']
+    ).drop(['day_index'], axis=1)
+
+    ds_empty = empty_grid.set_index(['lon', 'lat', 'time']).to_xarray()
+    ds_empty = ds_empty.set_coords('week')
+    
+    # Concatenate the generated data with the adjusted period 1 and period 2 data
+    ds_adjusted = xr.concat(
+        [ds_period1, ds_empty, ds_period2], dim="time"
+    ).sortby("time")
+
+    ds_adjusted = ds_adjusted.rename({"swc": "swc_raw"})
+
+    return ds_adjusted
+
+def print_help():
+    print("Help, world!")
